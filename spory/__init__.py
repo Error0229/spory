@@ -1,0 +1,1 @@
+"""Spory battery charging planner."""
