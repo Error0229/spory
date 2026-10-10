@@ -52,7 +52,7 @@ def main() -> None:
 
     setup = DIST / f"spory-setup-{__version__}.exe"
     digest = hashlib.sha256(setup.read_bytes()).hexdigest()
-    (DIST / f"{setup.name}.sha256").write_text(f"{digest}  {setup.name}\n", encoding="ascii")
+    (DIST / f"{setup.name}.sha256").write_text(f"{digest}  {setup.name}\n", encoding="ascii", newline="\n")
     print(f"built {setup} ({setup.stat().st_size / 1e6:.1f} MB)")
 
 
