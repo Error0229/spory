@@ -1,0 +1,5 @@
+A limit stops charging. It does not drain.
+
+spory can stop charging at any level, but it cannot make the battery go down while the charger is plugged in. If the battery is above your limit, it stays there until you use the laptop unplugged.
+
+spory holds the battery at your normal limit while plugged in and charges it to full shortly before your departures. You can change the limit and departures in the app.

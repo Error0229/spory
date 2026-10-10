@@ -1,0 +1,42 @@
+# Push a tag like v0.2.0 (matching spory/__init__.py) to build and publish the installer.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Test
+        run: uv run --extra gui python -m unittest discover -s tests -v
+
+      - name: Check the tag matches the version
+        shell: bash
+        run: |
+          version=$(uv run python -c "import spory; print(spory.__version__)")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match spory.__version__ $version"; exit 1
+          fi
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        run: uv run --extra gui --group build python packaging/build.py
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/spory-setup-*.exe dist/spory-setup-*.exe.sha256 \
+            --title "spory ${GITHUB_REF_NAME#v}" --generate-notes
