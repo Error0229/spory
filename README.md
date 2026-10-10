@@ -70,3 +70,18 @@ uv run --extra gui --group build python packaging/build.py   # dist/spory-setup-
 Building the installer also needs Inno Setup (`scoop install extras/inno-setup`). To release, bump `__version__` in `spory/__init__.py` and push a matching tag (`v0.2.0`); the `release` workflow tests, builds and publishes the installer with its `.sha256`, which in-app updates require. In-app update checks use the public GitHub API, so they work once releases are public.
 
 The planner, estimator, schedule, controller, simulator, updater and backends (with fake firmware and devices) are tested without hardware. Telemetry, `diagnose`, `limit` and `run` need Windows.
+
+## Contributing: help spory control your laptop
+
+Contributions for other devices are very welcome. Today only MSI laptops get real charge control (verified on one model); every other laptop falls back to reminders. If you have a Lenovo, Dell, HP, ASUS, Surface, Framework, Samsung, or another MSI model, you can help close that gap.
+
+**Report your device.** Even without code, an [issue](https://github.com/Error0229/spory/issues) helps. Include the output of `spory-cli diagnose` from an administrator terminal, your exact model and BIOS version, and how the vendor's own app sets a charge limit (for example Lenovo Vantage, Dell Power Manager, MyASUS).
+
+**Confirm another MSI model.** If `run --allow-unverified` reads and sets the limit correctly on your MSI laptop, open a PR adding the model name to `VERIFIED_MODELS` in `spory/msi.py`, with the `diagnose` output.
+
+**Add a vendor backend.** Implement the `BatteryAdapter` protocol in `spory/hardware.py` (see `spory/msi.py` as the example), register it in `spory/backends.py`, and add tests with fake firmware like `tests/test_backends.py`. A backend must:
+
+- only stop charging at the limit, never force a discharge, since a limit must not drain the battery;
+- read the current limit first and refuse to write if it is in an unexpected format;
+- be reversible, and leave the battery in a safe state in `close()`;
+- start with only the models you have tested, gated like `VERIFIED_MODELS`.
