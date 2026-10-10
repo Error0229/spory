@@ -12,7 +12,7 @@ from spory.backends import driver_capabilities, select_backend
 from spory import __version__
 from spory.hardware import BatteryStatus, is_admin, read_system_power_status
 from spory.reminders import notify
-from spory.windows_driver import supports_control
+from spory.windows_driver import describe
 from spory.history import BatterySample, HistoryLog
 from spory.schedule import OneTimeDeadline, WeeklyRule, parse_weekdays
 from spory.service import Service, refit
@@ -46,6 +46,20 @@ def percent(text: str) -> float:
     value = float(text)
     if not 0 <= value <= 100:
         raise argparse.ArgumentTypeError("must be between 0 and 100")
+    return value
+
+
+def minutes(text: str) -> float:
+    value = float(text)
+    if not 0 <= value < float("inf"):
+        raise argparse.ArgumentTypeError("must be zero or more")
+    return value
+
+
+def positive(text: str) -> float:
+    value = float(text)
+    if not 0 < value < float("inf"):
+        raise argparse.ArgumentTypeError("must be more than zero")
     return value
 
 
@@ -237,8 +251,7 @@ def cmd_diagnose(store: Store, config: Config, args) -> int:
         if caps is None:
             print(f"Battery:  {path} (capabilities unavailable)")
         else:
-            control = "supports" if supports_control(caps) else "no"
-            print(f"Battery:  {path} flags=0x{caps:08X} ({control} charge control)")
+            print(f"Battery:  {path} flags=0x{caps:08X} ({describe(caps)})")
     for note in selection.notes:
         print(f"  - {note}")
     print(f"Backend:  {selection.adapter.name}")
@@ -330,31 +343,31 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("cap", help="show or set the normal cap and safety margin")
     s.add_argument("percent_value", nargs="?", type=percent, metavar="PERCENT")
-    s.add_argument("--margin", type=float, help="safety margin in minutes")
+    s.add_argument("--margin", type=minutes, help="safety margin in minutes")
     s.set_defaults(func=cmd_cap)
 
     s = sub.add_parser("charge-now", help="charge to 100%% now, ignoring the cap for a while")
-    s.add_argument("--hours", type=float, default=3)
+    s.add_argument("--hours", type=positive, default=3)
     s.add_argument("--until", help="HH:MM or YYYY-MM-DDTHH:MM")
     s.add_argument("--cancel", action="store_true")
     s.set_defaults(func=cmd_charge_now)
 
     s = sub.add_parser("simulate", help="replay the schedule against a simulated battery")
-    s.add_argument("--hours", type=float, default=48)
+    s.add_argument("--hours", type=positive, default=48)
     s.add_argument("--start-percent", type=percent, default=60)
-    s.add_argument("--away-hours", type=float, default=9, help="time unplugged after each deadline")
+    s.add_argument("--away-hours", type=minutes, default=9, help="time unplugged after each deadline")
     s.set_defaults(func=cmd_simulate)
 
     s = sub.add_parser("log", help="record battery telemetry to the history file")
     s.add_argument("--watch", action="store_true", help="keep logging")
-    s.add_argument("--interval", type=float, default=60, help="seconds between samples")
+    s.add_argument("--interval", type=positive, default=60, help="seconds between samples")
     s.set_defaults(func=cmd_log)
 
     s = sub.add_parser("learn", help="fit charge speed from recorded history")
     s.set_defaults(func=cmd_learn)
 
     s = sub.add_parser("run", help="run the scheduler loop with the best available backend")
-    s.add_argument("--interval", type=float, default=60, help="seconds between checks")
+    s.add_argument("--interval", type=positive, default=60, help="seconds between checks")
     s.add_argument("--dry-run", action="store_true", help="log cap changes without applying them")
     s.add_argument("--allow-unverified", action="store_true", help="try the MSI backend on unverified MSI models")
     s.set_defaults(func=cmd_run)

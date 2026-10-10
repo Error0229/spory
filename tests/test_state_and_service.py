@@ -15,6 +15,11 @@ UTC = timezone.utc
 
 
 class StoreTests(unittest.TestCase):
+    def test_bad_margin_in_file_falls_back_to_default(self):
+        for bad in (-5, float("inf")):
+            self.assertEqual(Config.from_dict({"safety_margin_minutes": bad}).safety_margin_minutes, 15)
+        self.assertEqual(Config.from_dict({"safety_margin_minutes": 0}).safety_margin_minutes, 0)
+
     def test_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp))

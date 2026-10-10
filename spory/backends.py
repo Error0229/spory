@@ -1,7 +1,8 @@
 """Pick the best way to control charging on this PC.
 
-Order: a vendor backend (MSI today), then the generic Windows battery driver,
-then reminders only. Any Windows laptop gets at least the reminders.
+Order: a vendor backend (MSI today), then reminders only. Any Windows laptop
+gets at least the reminders. The generic Windows battery driver is not a backend:
+it can only force discharge, which drains the battery instead of holding it.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from dataclasses import dataclass, field
 from spory.hardware import BatteryAdapter, is_admin, require_windows, system_model
 from spory.msi import VERIFIED_MODELS, MsiBattery, MsiError, is_msi
 from spory.reminders import ReminderOnlyBattery
-from spory.windows_driver import WindowsDriverBattery, battery_devices
+from spory.windows_driver import battery_devices
 
 
 @dataclass
@@ -46,19 +47,6 @@ def select_backend(allow_unverified: bool = False) -> Selection:
                 return Selection(msi, manufacturer, model, admin, notes)
             except (MsiError, OSError) as exc:
                 notes.append(f"MSI: not usable ({exc})")
-
-    if admin:
-        try:
-            driver = WindowsDriverBattery.detect()
-        except OSError as exc:
-            driver = None
-            notes.append(f"Windows battery driver: query failed ({exc})")
-        if driver:
-            notes.append("Windows battery driver: firmware supports charge/discharge control")
-            return Selection(driver, manufacturer, model, admin, notes)
-        notes.append("Windows battery driver: firmware does not support charge control")
-    else:
-        notes.append("Windows battery driver: run as administrator to use it if supported")
 
     notes.append("falling back to plug/unplug reminders")
     return Selection(ReminderOnlyBattery(), manufacturer, model, admin, notes)

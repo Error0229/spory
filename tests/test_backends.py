@@ -7,7 +7,7 @@ from spory.hardware import BatteryStatus, ReadOnlyAdapterError
 from spory.msi import MsiBattery, MsiError, decode_limit, encode_limit, is_msi
 from spory.reminders import ReminderOnlyBattery, Reminders
 from spory.schedule import Deadline
-from spory.windows_driver import BATTERY_CHARGE, BATTERY_DISCHARGE, WindowsDriverBattery, supports_control
+from spory.windows_driver import describe
 
 UTC = timezone.utc
 
@@ -62,42 +62,10 @@ class MsiTests(unittest.TestCase):
         self.assertFalse(is_msi("LENOVO"))
 
 
-class FakeDevice:
-    path = "fake"
-
-    def __init__(self, caps=3):
-        self.caps = caps
-        self.levels = []
-
-    def capabilities(self):
-        return self.caps
-
-    def set_level(self, level):
-        self.levels.append(level)
-
-
 class WindowsDriverTests(unittest.TestCase):
-    def test_capability_flags(self):
-        self.assertTrue(supports_control(0x80000003))
-        self.assertFalse(supports_control(0x80000000))  # what the MSI laptop reports
-        self.assertFalse(supports_control(0x80000001))
-
-    def test_software_cap_with_hysteresis(self):
-        dev = FakeDevice()
-        b = WindowsDriverBattery(dev, read_status=plugged(50))
-        b.set_charge_cap(60)
-        b.maintain(BatteryStatus(60, True, True))
-        b.maintain(BatteryStatus(59, True, False))  # inside the band: no change
-        b.maintain(BatteryStatus(57, True, False))
-        self.assertEqual(dev.levels, [BATTERY_CHARGE, BATTERY_DISCHARGE, BATTERY_CHARGE])
-
-    def test_close_never_leaves_discharging(self):
-        dev = FakeDevice()
-        b = WindowsDriverBattery(dev, read_status=plugged(70))
-        b.set_charge_cap(60)
-        self.assertEqual(dev.levels, [BATTERY_DISCHARGE])
-        b.close(60)
-        self.assertEqual(dev.levels[-1], BATTERY_CHARGE)
+    def test_describe_flags(self):
+        self.assertEqual(describe(0x80000003), "set-charge, set-discharge")
+        self.assertEqual(describe(0x80000000), "no set-information support")  # what the MSI laptop reports
 
 
 class ReminderTests(unittest.TestCase):

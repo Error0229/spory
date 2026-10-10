@@ -1,39 +1,19 @@
-"""Generic Windows charge control through the battery class driver.
+"""Read-only battery capability flags from the Windows battery class driver.
 
-Windows lets a program ask the battery to charge or discharge with
-IOCTL_BATTERY_SET_INFORMATION (BatteryCharge / BatteryDischarge), but only
-when the firmware advertises BATTERY_SET_CHARGE_SUPPORTED and
-BATTERY_SET_DISCHARGE_SUPPORTED. Many consumer laptops (including the MSI
-Prestige 14Evo B13M) advertise neither, so this backend is chosen only when
-both flags are present. The cap is enforced in software: discharge at the cap,
-charge again a few percent below it.
-
-This backend has not been tested on hardware that supports it.
+IOCTL_BATTERY_SET_INFORMATION offers BatteryCharge and BatteryDischarge, but no
+"stop charging". BatteryDischarge makes the battery power the PC even on AC, so
+using it to enforce a cap would drain the battery and cycle it while plugged in.
+spory therefore never writes through this interface; it only reports the flags
+in `spory diagnose`.
 """
 
 from __future__ import annotations
 
-from typing import Callable, Protocol
-
-from spory.hardware import BatteryStatus, read_system_power_status
-
 SET_CHARGE_SUPPORTED = 0x00000001
 SET_DISCHARGE_SUPPORTED = 0x00000002
-BATTERY_CHARGE = 1
-BATTERY_DISCHARGE = 2
-HYSTERESIS_PERCENT = 3
 
 IOCTL_BATTERY_QUERY_TAG = 0x294040
 IOCTL_BATTERY_QUERY_INFORMATION = 0x294044
-IOCTL_BATTERY_SET_INFORMATION = 0x298048
-
-
-class BatteryDevice(Protocol):
-    path: str
-
-    def capabilities(self) -> int: ...
-
-    def set_level(self, level: int) -> None: ...
 
 
 class Win32BatteryDevice:
@@ -42,7 +22,7 @@ class Win32BatteryDevice:
     def __init__(self, path: str):
         self.path = path
 
-    def _ioctl(self, code: int, in_buf, out_buf, write: bool = False) -> None:
+    def _ioctl(self, code: int, in_buf, out_buf) -> None:
         import ctypes
         from ctypes import wintypes
 
@@ -52,8 +32,7 @@ class Win32BatteryDevice:
             wintypes.HANDLE, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD,
             ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p,
         ]
-        access = 0x80000000 | (0x40000000 if write else 0)  # GENERIC_READ | GENERIC_WRITE
-        handle = kernel32.CreateFileW(self.path, access, 3, None, 3, 0x80, None)
+        handle = kernel32.CreateFileW(self.path, 0x80000000, 3, None, 3, 0x80, None)  # GENERIC_READ
         if handle in (None, wintypes.HANDLE(-1).value):
             raise ctypes.WinError(ctypes.get_last_error())
         try:
@@ -97,15 +76,6 @@ class Win32BatteryDevice:
         info = INFO()
         self._ioctl(IOCTL_BATTERY_QUERY_INFORMATION, QUERY(self._tag(), 0, 0), info)  # BatteryInformation
         return info.Capabilities
-
-    def set_level(self, level: int) -> None:
-        import ctypes
-        from ctypes import wintypes
-
-        class SET(ctypes.Structure):
-            _fields_ = [("BatteryTag", wintypes.ULONG), ("InformationLevel", ctypes.c_int), ("Buffer", ctypes.c_ubyte * 4)]
-
-        self._ioctl(IOCTL_BATTERY_SET_INFORMATION, SET(self._tag(), level), None, write=True)
 
 
 def battery_devices() -> list[Win32BatteryDevice]:
@@ -153,58 +123,8 @@ def battery_devices() -> list[Win32BatteryDevice]:
     return devices
 
 
-def supports_control(capabilities: int) -> bool:
-    needed = SET_CHARGE_SUPPORTED | SET_DISCHARGE_SUPPORTED
-    return capabilities & needed == needed
-
-
-class WindowsDriverBattery:
-    name = "windows battery driver"
-    writable = True
-
-    def __init__(
-        self,
-        device: BatteryDevice,
-        read_status: Callable[[], BatteryStatus] = read_system_power_status,
-    ):
-        self.device = device
-        self._read_status = read_status
-        self.cap = 100.0
-        self.level: int | None = None
-
-    @classmethod
-    def detect(cls) -> WindowsDriverBattery | None:
-        for device in battery_devices():
-            try:
-                if supports_control(device.capabilities()):
-                    return cls(device)
-            except OSError:
-                continue
-        return None
-
-    def read_status(self) -> BatteryStatus:
-        return self._read_status()
-
-    def read_charge_cap(self) -> float:
-        return self.cap
-
-    def set_charge_cap(self, percent: float) -> None:
-        self.cap = percent
-        self.maintain(self.read_status())
-
-    def maintain(self, status: BatteryStatus) -> None:
-        if self.cap >= 100 or status.percent <= self.cap - HYSTERESIS_PERCENT:
-            wanted = BATTERY_CHARGE
-        elif status.percent >= self.cap and status.plugged_in:
-            wanted = BATTERY_DISCHARGE
-        else:
-            return  # inside the hysteresis band: keep the current level
-        if wanted != self.level:
-            self.device.set_level(wanted)
-            self.level = wanted
-
-    def close(self, normal_cap: float) -> None:
-        # Never leave the battery forced to discharge after spory exits.
-        if self.level != BATTERY_CHARGE:
-            self.device.set_level(BATTERY_CHARGE)
-            self.level = BATTERY_CHARGE
+def describe(capabilities: int) -> str:
+    """The set-information flags the firmware advertises, for diagnosis."""
+    flags = [name for bit, name in ((SET_CHARGE_SUPPORTED, "set-charge"), (SET_DISCHARGE_SUPPORTED, "set-discharge"))
+             if capabilities & bit]
+    return ", ".join(flags) if flags else "no set-information support"

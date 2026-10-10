@@ -103,7 +103,7 @@ class Config:
         rates = data.get("minutes_per_percent")
         return cls(
             normal_cap=float(data.get("normal_cap", 60)),
-            safety_margin_minutes=float(data.get("safety_margin_minutes", 15)),
+            safety_margin_minutes=_margin(data.get("safety_margin_minutes", 15)),
             schedule=schedule,
             charge_now_until=datetime.fromisoformat(until) if until else None,
             active=ActiveWindow(datetime.fromisoformat(active["deadline"]), float(active["target"]))
@@ -113,6 +113,12 @@ class Config:
             original_limit=float(data["original_limit"]) if data.get("original_limit") is not None else None,
             notice_seen=bool(data.get("notice_seen", False)),
         )
+
+
+def _margin(value) -> float:
+    """A hand-edited negative or infinite margin would stop the planner; fall back to the default."""
+    value = float(value)
+    return value if 0 <= value < float("inf") else 15.0
 
 
 class Store:

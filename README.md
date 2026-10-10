@@ -7,7 +7,6 @@ Spory works on any Windows laptop and picks the best available way to control ch
 | Backend | When | How |
 | --- | --- | --- |
 | `msi` | MSI laptops | Sets the firmware charge limit through MSI's ACPI-WMI interface, the one MSI Center uses. Verified on the Prestige 14Evo B13M. |
-| `windows battery driver` | Firmware advertises charge/discharge control | Enforces the cap in software through `IOCTL_BATTERY_SET_INFORMATION`. Not yet tested on supporting hardware. |
 | `reminders only` | Everything else | Windows notifications: "plug in now to reach 100% by 09:30", "unplug to stay near 60%". |
 
 > [!IMPORTANT]
