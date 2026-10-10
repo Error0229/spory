@@ -16,7 +16,9 @@ if QApplication:
     APP = QApplication.instance() or QApplication([])
 
 
-def wheel(widget, delta: int, modifiers=Qt.KeyboardModifier.NoModifier):
+def wheel(widget, delta: int, modifiers=None):
+    if modifiers is None:
+        modifiers = Qt.KeyboardModifier.NoModifier
     event = QWheelEvent(QPointF(5, 5), QPointF(5, 5), QPoint(0, 0), QPoint(0, delta),
                         Qt.MouseButton.NoButton, modifiers, Qt.ScrollPhase.NoScrollPhase, False)
     widget.wheelEvent(event)
