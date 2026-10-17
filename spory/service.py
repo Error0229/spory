@@ -125,7 +125,7 @@ class Service:
                     stamp = self.clock().strftime("%Y-%m-%d %H:%M")
                     if result.message:
                         log(f"{stamp} {result.message} ({result.decision.reason})")
-                except (OSError, RuntimeError) as exc:
+                except Exception as exc:  # one bad tick must not stop the service
                     log(f"error: {exc}")
                 time_module.sleep(interval_seconds)
         finally:

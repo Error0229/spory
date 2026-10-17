@@ -1,9 +1,11 @@
 import re
+import subprocess
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest import mock
 
 from spory.controller import Decision
-from spory.hardware import BatteryStatus, ReadOnlyAdapterError
+from spory.hardware import BatteryStatus, ReadOnlyAdapterError, run_powershell
 from spory.msi import MsiBattery, MsiError, decode_limit, encode_limit, is_msi
 from spory.reminders import ReminderOnlyBattery, Reminders
 from spory.schedule import Deadline
@@ -56,6 +58,12 @@ class MsiTests(unittest.TestCase):
     def test_no_admin_output_is_an_error(self):
         with self.assertRaises(MsiError):
             MsiBattery(runner=FakeMsiFirmware(ok=False)).read_charge_cap()
+
+    def test_powershell_timeout_is_an_os_error(self):
+        hang = subprocess.TimeoutExpired(["powershell"], 60)
+        with mock.patch("spory.hardware.subprocess.run", side_effect=hang):
+            with self.assertRaises(OSError):
+                run_powershell("Get-CimInstance ...")
 
     def test_manufacturer_detection(self):
         self.assertTrue(is_msi("Micro-Star International Co., Ltd."))

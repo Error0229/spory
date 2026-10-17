@@ -140,11 +140,15 @@ def system_model() -> tuple[str, str]:
 
 
 def run_powershell(script: str, timeout: float = 60) -> str:
-    result = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired:
+        # WMI/ACPI calls occasionally hang inside the firmware; callers treat this as a failed read.
+        raise TimeoutError(f"PowerShell did not finish within {timeout:g}s") from None
     return result.stdout

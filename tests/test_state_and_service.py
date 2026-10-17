@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from spory.estimator import ChargeEstimator
 from spory.hardware import BatteryStatus, SimulatedBattery
@@ -98,6 +99,27 @@ class ServiceTests(unittest.TestCase):
         service.tick()
         service.close()
         self.assertEqual(battery.cap, 60)
+
+    def test_failed_tick_does_not_stop_the_loop(self):
+        battery = SimulatedBattery(ChargeEstimator(), percent=60, cap=60)
+        reads = [ValueError("firmware hiccup")]
+        real_read = battery.read_charge_cap
+
+        def flaky_read():
+            if reads:
+                raise reads.pop()
+            return real_read()
+
+        battery.read_charge_cap = flaky_read
+        service = Service(self.store, battery, clock=lambda: self.now)
+        logs = []
+        with mock.patch("spory.service.time_module") as fake_time:
+            fake_time.sleep.side_effect = [None, KeyboardInterrupt]
+            with self.assertRaises(KeyboardInterrupt):
+                service.run_forever(log=logs.append)
+        self.assertEqual(logs[0], "error: firmware hiccup")
+        self.assertIn("set cap 60% -> 100%", logs[1])
+        self.assertEqual(battery.cap, 60)  # restored on the way out
 
 
 if __name__ == "__main__":
