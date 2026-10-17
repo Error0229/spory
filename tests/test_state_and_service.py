@@ -1,17 +1,38 @@
+import re
+import subprocess
 import tempfile
 import unittest
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from spory.estimator import ChargeEstimator
 from spory.hardware import BatteryStatus, SimulatedBattery
 from spory.history import HistoryLog
+from spory.msi import MsiBattery
 from spory.reminders import ReminderOnlyBattery
 from spory.schedule import OneTimeDeadline, WeeklyRule, parse_weekdays
 from spory.service import Service
 from spory.state import ActiveWindow, Config, Store
 
 UTC = timezone.utc
+
+
+class HangingMsiFirmware:
+    """Stands in for subprocess.run: MSI_ACPI hangs `hangs` times, then answers."""
+
+    def __init__(self, hangs, value=0x80 | 60):
+        self.hangs = hangs
+        self.value = value
+
+    def __call__(self, args, **kwargs):
+        if self.hangs:
+            self.hangs -= 1
+            raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+        script = args[-1]
+        if "Set_Data" in script:
+            self.value = int(re.search(r"\$bytes\[1\] = (\d+)", script).group(1))
+        return subprocess.CompletedProcess(args, 0, stdout=f"bytes=1,{self.value}," + ",".join(["0"] * 30))
 
 
 class StoreTests(unittest.TestCase):
@@ -99,6 +120,20 @@ class ServiceTests(unittest.TestCase):
         service.close()
         self.assertEqual(battery.cap, 60)
 
+    def test_powershell_timeout_does_not_stop_the_loop(self):
+        firmware = HangingMsiFirmware(hangs=1)
+        battery = MsiBattery(read_status=lambda: BatteryStatus(60, True, True))
+        service = Service(self.store, battery, clock=lambda: self.now)
+        logs = []
+        with mock.patch("spory.hardware.subprocess.run", side_effect=firmware), mock.patch(
+            "spory.service.time_module"
+        ) as fake_time:
+            fake_time.sleep.side_effect = [None, KeyboardInterrupt]
+            with self.assertRaises(KeyboardInterrupt):
+                service.run_forever(log=logs.append)
+        self.assertEqual(logs[0], "error: PowerShell did not finish within 60s")
+        self.assertIn("set cap 60% -> 100%", logs[1])
+        self.assertEqual(firmware.value, 0x80 | 60)  # restored on the way out
 
 if __name__ == "__main__":
     unittest.main()
